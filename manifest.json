@@ -1,7 +1,7 @@
 {
 	"id": "git-log-plugin",
 	"name": "GitLog",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
 	"description": "Add a git log output to a page",
 	"author": "Hunter Schafer",
