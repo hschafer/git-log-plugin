@@ -17,10 +17,12 @@ interface GitRepo {
 
 interface GitLogPluginSettings {
 	repos: GitRepo[];
+	lastSelectedRepos: string[];
 }
 
 const DEFAULT_SETTINGS: GitLogPluginSettings = {
 	repos: [],
+	lastSelectedRepos: [],
 };
 
 export default class GitLogPlugin extends Plugin {
@@ -104,7 +106,12 @@ export default class GitLogPlugin extends Plugin {
 			const modal = new RepoSelectionModal(
 				this.app,
 				this.settings.repos,
-				(result) => {
+				this.settings.lastSelectedRepos,
+				async (result) => {
+					this.settings.lastSelectedRepos = result.map(
+						(repo) => repo.name
+					);
+					await this.saveSettings();
 					resolve(result);
 				}
 			);
@@ -154,16 +161,21 @@ class RepoSelectionModal extends Modal {
 	repos: GitRepo[];
 	onSubmit: (result: GitRepo[]) => void;
 	selectedRepos: GitRepo[];
+	lastSelectedRepos: string[];
 
 	constructor(
 		app: App,
 		repos: GitRepo[],
+		lastSelectedRepos: string[],
 		onSubmit: (result: GitRepo[]) => void
 	) {
 		super(app);
 		this.repos = repos;
 		this.onSubmit = onSubmit;
-		this.selectedRepos = [];
+		this.lastSelectedRepos = lastSelectedRepos;
+		this.selectedRepos = repos.filter((repo) =>
+			lastSelectedRepos.includes(repo.name)
+		);
 	}
 
 	onOpen() {
@@ -180,6 +192,11 @@ class RepoSelectionModal extends Modal {
 				attr: { for: repo.name },
 			});
 			contentEl.createEl("br");
+
+			// Check the checkbox if it was selected last time
+			if (this.lastSelectedRepos.includes(repo.name)) {
+				checkbox.checked = true;
+			}
 
 			checkbox.addEventListener("change", (e) => {
 				if ((e.target as HTMLInputElement).checked) {
