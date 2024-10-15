@@ -13,6 +13,7 @@ import { execSync } from "child_process";
 interface GitRepo {
 	name: string;
 	path: string;
+	allBranches?: boolean;
 }
 
 interface GitLogPluginSettings {
@@ -69,9 +70,14 @@ export default class GitLogPlugin extends Plugin {
 			if (selectedRepos.length > 0) {
 				let gitLog = "";
 				for (const repo of selectedRepos) {
-					gitLog += `>[!NOTE]- \`git log\` for ${repo.name}\n`;
+					gitLog += `>[!NOTE]- \`git log\` for ${repo.name}${
+						repo.allBranches ? " (all branches)" : ""
+					}\n`;
 					gitLog += "> ```\n";
-					gitLog += "> " + this.getGitLog(date, repo.path) + "\n";
+					gitLog +=
+						"> " +
+						this.getGitLog(date, repo.path, repo.allBranches) +
+						"\n";
 					gitLog += "> ```\n";
 					gitLog += "\n";
 				}
@@ -119,9 +125,14 @@ export default class GitLogPlugin extends Plugin {
 		});
 	}
 
-	getGitLog(date: string, repoPath: string): string {
+	getGitLog(
+		date: string,
+		repoPath: string,
+		allBranches: boolean = false
+	): string {
 		try {
-			const command = `git -C "${repoPath}" log --oneline --no-merges --date=short --format="%h %s" --after="${date} 00:00:00" --before="${date} 23:59:59"`;
+			const allBranchesFlag = allBranches ? "--all" : "";
+			const command = `git -C "${repoPath}" log ${allBranchesFlag} --oneline --no-merges --date=short --format="%h %s (%D)" --after="${date} 00:00:00" --before="${date} 23:59:59"`;
 			const output = execSync(command).toString().trim();
 			return output || "No commits found for the specified date.";
 		} catch (error) {
@@ -183,19 +194,37 @@ class RepoSelectionModal extends Modal {
 		contentEl.createEl("h2", { text: "Select Repositories" });
 
 		this.repos.forEach((repo) => {
-			const checkbox = contentEl.createEl("input", {
+			const repoDiv = contentEl.createEl("div");
+
+			const checkbox = repoDiv.createEl("input", {
 				type: "checkbox",
 				attr: { id: repo.name },
 			});
-			contentEl.createEl("label", {
+			repoDiv.createEl("label", {
 				text: repo.name,
 				attr: { for: repo.name },
 			});
+
+			// Add checkbox for all branches
+			const allBranchesCheckbox = repoDiv.createEl("input", {
+				type: "checkbox",
+				attr: { id: `${repo.name}-all-branches` },
+			});
+			repoDiv.createEl("label", {
+				text: "All branches",
+				attr: { for: `${repo.name}-all-branches` },
+			});
+
 			contentEl.createEl("br");
 
 			// Check the checkbox if it was selected last time
 			if (this.lastSelectedRepos.includes(repo.name)) {
 				checkbox.checked = true;
+			}
+
+			// Check the all branches checkbox if it was set before
+			if (repo.allBranches) {
+				allBranchesCheckbox.checked = true;
 			}
 
 			checkbox.addEventListener("change", (e) => {
@@ -206,6 +235,10 @@ class RepoSelectionModal extends Modal {
 						(r) => r.name !== repo.name
 					);
 				}
+			});
+
+			allBranchesCheckbox.addEventListener("change", (e) => {
+				repo.allBranches = (e.target as HTMLInputElement).checked;
 			});
 		});
 
@@ -255,9 +288,18 @@ class GitLogSettingTab extends PluginSettingTab {
 			);
 
 		this.plugin.settings.repos.forEach((repo, index) => {
-			new Setting(containerEl)
+			const repoSetting = new Setting(containerEl)
 				.setName(repo.name)
 				.setDesc(repo.path)
+				.addToggle((toggle) =>
+					toggle
+						.setTooltip("Include all branches")
+						.setValue(repo.allBranches || false)
+						.onChange(async (value) => {
+							repo.allBranches = value;
+							await this.plugin.saveSettings();
+						})
+				)
 				.addButton((button) =>
 					button.setButtonText("Delete").onClick(async () => {
 						this.plugin.settings.repos.splice(index, 1);
